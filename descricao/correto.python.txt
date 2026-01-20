@@ -1,0 +1,46 @@
+""" declaracao de variaveis """
+a = 0.0
+b = 0.0
+c = 0.0
+d = 0.0
+e = 0.0
+f = 0.0
+g = 0.0
+h = 0.0
+
+"""declaracao de função """
+def um(a, g, d, c):
+  h = 0.0
+  i = 0.0
+  j = 0.0
+  l = 0.0
+  h = 2.0
+  a = g + 3.4 / h
+  l = c - d * 2
+  if (c+d)>=5 :
+    print(a)
+  else:
+    print(l)
+
+def dois(j,k, l):
+  cont = 0.0
+  quant = 0.0
+  quant = read()
+  cont = read()
+  while cont <= quant:
+     print(cont)
+     cont = cont + 1
+  l = l + j + cont
+  print(k)
+  print(l)
+
+"""  corpo * principal / """
+
+print(e) """real"""
+f = input() """real"""
+g= input() """inteiro"""
+h = input() """ inteiro"""
+d = e/f """real"""
+dois(h,d,h)
+um(f,e,g,h)         """real,real,inteiro,inteiro"""
+"""aqui termina o programa"""

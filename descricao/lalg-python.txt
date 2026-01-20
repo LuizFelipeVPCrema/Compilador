@@ -1,0 +1,34 @@
+Especificação da Sintaxe da Linguagem LALG
+- Comentários na LALG: entre """ """
+
+<programa> -> <corpo>
+<corpo> -> <dc> <comandos>
+<dc> -> <dc_v> <mais_dc> | <dc_f> | λ
+<mais_dc> -> <dc> | λ
+<dc_v> -> <ident> = <expressao>
+<dc_f> -> def ident <parametros> : <corpo_f>
+<parametros> -> ( <lista_par> ) | λ
+<lista_par> -> ident <mais_par>
+<mais_par> -> , <lista_par> | λ
+<corpo_f> -> <bloco>
+<comandos> -> <comando> <mais_comandos>
+<mais_comandos> -> <comandos> | λ
+<comando> -> print (ident) |
+              if <condicao> : <bloco> <pfalsa> |
+              while <condicao> : <bloco> |
+              ident <restoIdent>
+<bloco> -> tabulacao<comandos>
+<restoIdent> -> = <expressao> | <lista_arg>
+<lista_arg> -> ( <argumentos> ) | λ
+<argumentos> -> <expressao> <mais_argumentos>
+<mais_argumentos> -> , <argumentos> | λ
+<condicao> -> <expressao> <relacao> <expressao>
+<relacao> -> == | != | >= | <= | > | <
+<expressao> -> <termo> <outros_termos> | input()
+<outros_termos> -> <op_ad> <termo> <outros_termos> | λ
+<op_ad> -> + | -
+<termo> -> <fator> <mais_fatores>
+<mais_fatores> -> <op_mul> <fator> <mais_fatores> | λ
+<op_mul> -> * | /
+<fator> -> ident | numero | ( <expressao> )
+<pfalsa> -> else : <bloco> | λ
