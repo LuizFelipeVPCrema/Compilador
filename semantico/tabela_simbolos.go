@@ -1,4 +1,4 @@
-package parser
+package semantico
 
 import "fmt"
 
@@ -71,4 +71,11 @@ func (tabelaDeSimbolos *TabelaDeSimbolos) Listar() {
 func (tabelaDeSimbolos *TabelaDeSimbolos) Buscar(nome string) (Simbolo, bool) {
 	simbolo, existe := tabelaDeSimbolos.simbolos[nome]
 	return simbolo, existe
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) VerificarVariavelDeclarada(nome string) error {
+	if _, existe := tabelaDeSimbolos.Buscar(nome); !existe {
+		return fmt.Errorf("erro semântico: variável '%s' não declarada", nome)
+	}
+	return nil
 }

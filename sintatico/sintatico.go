@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"ufmt.br/luiz-crema/compilador/lexer"
+	"ufmt.br/luiz-crema/compilador/semantico"
 )
 
 type Parser struct {
 	lexer            *lexer.Lexer
 	lookahead        lexer.Token
-	tabelaDeSimbolos *TabelaDeSimbolos
+	tabelaDeSimbolos *semantico.TabelaDeSimbolos
 }
 
 func NovoLexer(lexer *lexer.Lexer) *Parser {
@@ -55,8 +56,8 @@ func (parser *Parser) AtribuicaoOuChamada() error {
 
 	nome := parser.lookahead.Lexeme
 
-	if _, existe := parser.tabelaDeSimbolos.Buscar(nome); !existe {
-		return fmt.Errorf("erro semântico: variável '%s' não declarada", nome)
+	if err := parser.tabelaDeSimbolos.VerificarVariavelDeclarada(nome); err != nil {
+		return err
 	}
 
 	if parser.lookahead.Tag == lexer.TOKEN_ATRIBUICAO {
