@@ -12,36 +12,88 @@ const (
 type Simbolo struct {
 	Nome           string
 	Tipo           TipoSimbolo
-	QtdeParametros int // somente para funções
+	QtdeParametros int
+	Endereco       int
 }
 
 type TabelaDeSimbolos struct {
-	simbolos map[string]Simbolo
+	simbolos            map[string]Simbolo
+	proximoEndereco     int
+	adicionadosNaFuncao []string
 }
 
 func NovaTabelaDeSimbolos() *TabelaDeSimbolos {
 	return &TabelaDeSimbolos{
-		simbolos: make(map[string]Simbolo),
+		simbolos:            make(map[string]Simbolo),
+		proximoEndereco:     0,
+		adicionadosNaFuncao: nil,
 	}
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararVariavel(nome string) {
+	endereco := tabelaDeSimbolos.proximoEndereco
 	tabelaDeSimbolos.simbolos[nome] = Simbolo{
-		Nome: nome,
-		Tipo: SIMBOLO_VARIAVEL,
+		Nome:     nome,
+		Tipo:     SIMBOLO_VARIAVEL,
+		Endereco: endereco,
+	}
+	tabelaDeSimbolos.proximoEndereco++
+	if tabelaDeSimbolos.adicionadosNaFuncao != nil {
+		tabelaDeSimbolos.adicionadosNaFuncao = append(tabelaDeSimbolos.adicionadosNaFuncao, nome)
 	}
 }
 
-func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararFuncao(nome string, params int) error {
-	if _, exist := tabelaDeSimbolos.simbolos[nome]; exist {
+func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararFuncao(nome string, numParametros int) error {
+	if _, existe := tabelaDeSimbolos.simbolos[nome]; existe {
 		return fmt.Errorf("erro semântico: função '%s' já declarada", nome)
 	}
 	tabelaDeSimbolos.simbolos[nome] = Simbolo{
 		Nome:           nome,
 		Tipo:           SIMBOLO_FUNCAO,
-		QtdeParametros: params,
+		QtdeParametros: numParametros,
+		Endereco:       0,
 	}
 	return nil
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) AtualizarEnderecoFuncao(nome string, endereco int) error {
+	simbolo, encontrado := tabelaDeSimbolos.simbolos[nome]
+	if !encontrado || simbolo.Tipo != SIMBOLO_FUNCAO {
+		return fmt.Errorf("erro semântico: função '%s' não encontrada para atualizar endereço", nome)
+	}
+	simbolo.Endereco = endereco
+	tabelaDeSimbolos.simbolos[nome] = simbolo
+	return nil
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) ProximoEndereco() int {
+	return tabelaDeSimbolos.proximoEndereco
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) SetProximoEndereco(endereco int) {
+	tabelaDeSimbolos.proximoEndereco = endereco
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararParametro(nome string, endereco int) {
+	tabelaDeSimbolos.simbolos[nome] = Simbolo{
+		Nome:     nome,
+		Tipo:     SIMBOLO_VARIAVEL,
+		Endereco: endereco,
+	}
+	if tabelaDeSimbolos.adicionadosNaFuncao != nil {
+		tabelaDeSimbolos.adicionadosNaFuncao = append(tabelaDeSimbolos.adicionadosNaFuncao, nome)
+	}
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) EntrarFuncao() {
+	tabelaDeSimbolos.adicionadosNaFuncao = make([]string, 0)
+}
+
+func (tabelaDeSimbolos *TabelaDeSimbolos) SairFuncao() {
+	for _, nome := range tabelaDeSimbolos.adicionadosNaFuncao {
+		delete(tabelaDeSimbolos.simbolos, nome)
+	}
+	tabelaDeSimbolos.adicionadosNaFuncao = nil
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) Existe(nome string) bool {
@@ -49,16 +101,20 @@ func (tabelaDeSimbolos *TabelaDeSimbolos) Existe(nome string) bool {
 	return ok
 }
 
+func (tabelaDeSimbolos *TabelaDeSimbolos) ExisteNaFuncaoAtual(nome string) bool {
+	for _, n := range tabelaDeSimbolos.adicionadosNaFuncao {
+		if n == nome {
+			return true
+		}
+	}
+	return false
+}
+
 func (tabelaDeSimbolos *TabelaDeSimbolos) Adicionar(nome string, tipo TipoSimbolo) error {
 	if _, existe := tabelaDeSimbolos.simbolos[nome]; existe {
 		return fmt.Errorf("erro semântico: '%s' já declarado", nome)
 	}
-
-	tabelaDeSimbolos.simbolos[nome] = Simbolo{
-		Nome: nome,
-		Tipo: tipo,
-	}
-
+	tabelaDeSimbolos.simbolos[nome] = Simbolo{Nome: nome, Tipo: tipo}
 	return nil
 }
 
@@ -69,8 +125,8 @@ func (tabelaDeSimbolos *TabelaDeSimbolos) Listar() {
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) Buscar(nome string) (Simbolo, bool) {
-	simbolo, existe := tabelaDeSimbolos.simbolos[nome]
-	return simbolo, existe
+	simbolo, encontrado := tabelaDeSimbolos.simbolos[nome]
+	return simbolo, encontrado
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) VerificarVariavelDeclarada(nome string) error {

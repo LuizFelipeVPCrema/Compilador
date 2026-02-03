@@ -10,3 +10,7 @@ func (gerador *Gerador) GerarPrint(endereco int) {
 	gerador.emissor.Emitir("CRVL " + strconv.Itoa(endereco))
 	gerador.emissor.Emitir("IMPR")
 }
+
+func (gerador *Gerador) GerarImprimirPilha() {
+	gerador.emissor.Emitir("IMPR")
+}

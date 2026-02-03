@@ -1,42 +1,56 @@
 package gerador_codigo
 
-import "strconv"
+import (
+	"strconv"
+)
 
+// GerarIf: condição, DSVF (senão), bloco verdadeiro, DSVI (fim), [bloco falso].
 func (gerador *Gerador) GerarIf(
-	gerarCondicao func(),
-	blocoVerdadeiro func(),
-	blocoFalso func(),
-) {
-	condicaoSenao := gerador.NovoRotulo()
-	condicaoFim := gerador.NovoRotulo()
+	gerarCondicao func() error,
+	blocoVerdadeiro func() error,
+	blocoFalso func() error,
+) error {
+	if err := gerarCondicao(); err != nil {
+		return err
+	}
+	indiceDSVF := gerador.EmitirComMarcador("DSVF")
 
-	gerarCondicao()
-	gerador.emissor.Emitir("DSVF " + strconv.Itoa(condicaoSenao))
-
-	blocoVerdadeiro()
-	gerador.emissor.Emitir("DSVI " + strconv.Itoa(condicaoFim))
-
-	gerador.emissor.Emitir(strconv.Itoa(condicaoSenao))
+	if err := blocoVerdadeiro(); err != nil {
+		return err
+	}
+	indiceDSVI := gerador.EmitirComMarcador("DSVI")
+	linhaSenao := gerador.ProximaLinha()
 
 	if blocoFalso != nil {
-		blocoFalso()
+		if err := blocoFalso(); err != nil {
+			return err
+		}
 	}
+	linhaFim := gerador.ProximaLinha()
 
-	gerador.emissor.Emitir(strconv.Itoa(condicaoFim))
+	gerador.Preencher(indiceDSVI, linhaFim, "DSVI")
+	gerador.Preencher(indiceDSVF, linhaSenao, "DSVF")
+	return nil
 }
 
+// GerarWhile gera código para while: [início], condição, DSVF (fim), bloco, DSVI (início).
 func (gerador *Gerador) GerarWhile(
-	gerarCondicao func(),
-	bloco func(),
-) {
-	condicaoInicio := gerador.NovoRotulo()
-	condicaoFim := gerador.NovoRotulo()
+	gerarCondicao func() error,
+	bloco func() error,
+) error {
+	linhaInicio := gerador.ProximaLinha()
 
-	gerador.emissor.Emitir(strconv.Itoa(condicaoInicio))
-	gerarCondicao()
-	gerador.emissor.Emitir("DSVF " + strconv.Itoa(condicaoFim))
+	if err := gerarCondicao(); err != nil {
+		return err
+	}
+	indiceDSVF := gerador.EmitirComMarcador("DSVF")
 
-	bloco()
-	gerador.emissor.Emitir("DSVI " + strconv.Itoa(condicaoInicio))
-	gerador.emissor.Emitir(strconv.Itoa(condicaoFim))
+	if err := bloco(); err != nil {
+		return err
+	}
+	gerador.emissor.Emitir("DSVI " + strconv.Itoa(linhaInicio))
+
+	linhaFim := gerador.ProximaLinha()
+	gerador.Preencher(indiceDSVF, linhaFim, "DSVF")
+	return nil
 }

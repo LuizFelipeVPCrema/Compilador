@@ -2,24 +2,23 @@
 
 Este repositório contém um compilador didático para uma linguagem simples (LALG), dividido em etapas clássicas:
 
-- **Léxico** (`lexer/`): lê o arquivo fonte e gera uma tabela de tokens em `lexemas.txt`.
-- **Sintático** (`sintatico/`): consome tokens e valida a estrutura do programa.
-- **Semântico** (`semantico/`): mantém a tabela de símbolos (variáveis/funções) e validações associadas.
-- **Gerador de código intermediário/objeto** (`gerador_codigo/`): emite instruções de uma máquina virtual.
+## Estrutura do projeto
 
-Arquivos de referência importantes do projeto:
+- **lexer/** – analisador léxico (tokens)
+- **sintatico/** – analisador sintático (parser) + chamadas ao gerador
+- **semantico/** – tabela de símbolos (variáveis e funções)
+- **gerador_codigo/** – emissão das instruções (INPP, ALME, CRCT, CRVL, ARMZ, SOMA, SUBT, MULT, DIVI, LEIT, IMPR, DSVF, DSVI, PUSHER, PARAM, CHPR, RTPR, DESM, PARA)
 
-- `lexemas.txt`: saída do analisador léxico (tokens).
-- `descricao/codigo.objeto.txt`: gabarito/exemplo de código objeto esperado.
-- `descricao/correto.python.txt`: exemplo do programa fonte usado para gerar `lexemas.txt`.
-- `descricao/lalg-python.txt`: especificação (gramática) da linguagem.
+Arquivos de referência em **descricao/**:
 
-## Como rodar (estado atual)
+- `lalg-python.txt` – gramática
+- `correto.python.txt` – programa fonte de exemplo
+- `codigo.objeto.txt` – exemplo de código objeto gerado
 
-No estado atual, o `main.go` executa **somente o léxico** e gera `lexemas.txt`:
+## Como rodar
 
 ```bash
-go run . <arquivo_entrada>
+go run . <arquivo_fonte>
 ```
 
 Exemplo:
@@ -28,35 +27,41 @@ Exemplo:
 go run . descricao/correto.python.txt
 ```
 
-Isso deve gerar/atualizar `lexemas.txt`.
+Gera o arquivo **codigo.objeto.txt** na raiz do projeto.
 
-## Oque precisa ser feito (para concluir a geração do `codigo.objeto`)
+## O que já foi feito
 
-O projeto ainda precisa “fechar o ciclo” completo: **fonte → tokens → parsing/semântica → emissão de código objeto**.
+1. **Integração main → lexer, tabela, gerador, parser**  
+   O `main.go` monta o pipeline e o parser chama o gerador durante a análise.
 
-Checklist objetivo do que falta implementar/ajustar:
+2. **Declarações e comandos**  
+   Programa, Corpo, DC (declarações) e Comandos seguem a gramática. Variáveis globais: `DeclararVariavel` + `GerarAlocacao(1)`.
 
-1. **Integrar o parser com o gerador de código**
-   - Hoje o `sintatico/sintatico.go` consome tokens para validar a gramática, mas não chama o `gerador_codigo` enquanto parseia.
-   - Próximo passo: durante `Expressao`, `Termo`, `Fator`, `AtribuicaoOuChamada`, `Imprimir`, `Condicional`, `While`, `Funcao` etc., chamar as rotinas do `Gerador` para emitir o código correspondente.
+3. **Expressões**  
+   Fator emite CRCT (número) ou CRVL (variável). Termo emite MULT/DIVI. Expressão emite SOMA/SUBT.
 
-2. **Evoluir a tabela de símbolos para suportar endereços e escopo**
-   - O gabarito (`descricao/codigo.objeto.txt`) usa endereços (`ARMZ 12`, `CRVL 9`, etc.) e também precisa distinguir **variáveis globais, locais e parâmetros**.
-   - Próximo passo: armazenar no símbolo pelo menos: `Endereco`, `Escopo` (global/função) e metadados de função (endereço de entrada da função e quantidade de parâmetros).
+4. **Atribuição**  
+   Após avaliar a expressão, chama `GerarAtribuicao(endereco)` (ARMZ).
 
-3. **Criar as condicionais saltos/rótulos do `condicionais.go`**
-   - Criar `GerarIf`/`GerarWhile`.
+5. **print(expressao)**  
+   Avalia a expressão e emite IMPR.
 
+6. **if e while**  
+   Usam `GerarIf` e `GerarWhile`. Condição gera comparação (CMAI, CPMI, etc.) + DSVF/DSVI. Emissor tem buffer, contador de linha e backpatching (EmitirComMarcador, Preencher) para preencher os alvos dos saltos depois.
 
-4. **Mapear `read()` e `input()` para `LEIT`**
-   - Criar as funções de `read()` e `input()`
-   - Próximo passo: no parser, ao reconhecer `read()`/`input()` como expressão, emitir `LEIT` e depois, na atribuição, `ARMZ`.
+7. **Funções**  
+   - Declaração: registra função na tabela, emite DSVI para pular o corpo, grava endereço de entrada com `AtualizarEnderecoFuncao`; parâmetros com `DeclararParametro` (endereços base, base+1, …); ao sair do corpo, emite DESM n e RTPR.  
+   - Chamada: emite PUSHER (linha de retorno), PARAM para cada argumento (endereço), CHPR (endereço da função).  
+   - Tabela: um único mapa; ao sair da função, remove só os nomes da função atual (`adicionadosNaFuncao`) para não misturar main com corpo de função.
 
-5. **Funções: entrada, parâmetros, retorno e desalocação**
-   - O gabarito usa `PUSHER`, `PARAM`, `CHPR`, `RTPR` e `DESM` no final das funções.
-   - Próximo passo: definir claramente o protocolo de chamada e emitir a sequência correta durante:
-     - declaração de função (pular corpo no início do programa, depois entrar no corpo quando chamada)
-     - chamada de função (empilhar retorno, parâmetros, `CHPR`)
-     - final de função (`DESM n` + `RTPR`)
+8. **Indentação de blocos**  
+   Dentro de função/if/while, o bloco só continua se a próxima linha tiver indentação maior ou igual à do bloco. Se tiver menos (ou nenhuma), o bloco termina. Assim o corpo principal do programa precisa ter **menos indentação** que o corpo das funções (ex.: main sem espaço, funções com 2 espaços).
 
 
+## O que falta fazer
+
+1. **Executador (máquina virtual)**  
+   Nenhum módulo ainda lê o `codigo.objeto.txt` e executa as instruções. Falta implementar: ler o arquivo, interpretar cada linha (INPP, ALME, CRCT, CRVL, ARMZ, SOMA, SUBT, MULT, DIVI, LEIT, IMPR, DSVF, DSVI, PUSHER, PARAM, CHPR, RTPR, DESM, PARA), manter memória e pilha, executar até PARA.
+
+2. **Bater com o gabarito**  
+   O `descricao/codigo.objeto.txt` não emite código para inicializações com 0.0 (só ALME). O compilador atual emite CRCT 0.0 (e ARMZ onde aplicável). Para ficar igual ao gabarito seria preciso uma regra extra: quando a expressão for só 0 ou 0.0, emitir só ALME e não emitir CRCT/ARMZ. E o programa fonte do main deve ter menos indentação que o corpo das funções (ver `CORRECOES_CODIGO_OBJETO.md` se existir).

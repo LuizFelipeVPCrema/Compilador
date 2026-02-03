@@ -6,7 +6,7 @@ func (gerador *Gerador) GerarPusher(endereco int) {
 	gerador.emissor.Emitir("PUSHER " + strconv.Itoa(endereco))
 }
 
-func (gerador *Gerador) GerarParamentro(endereco int) {
+func (gerador *Gerador) GerarParametro(endereco int) {
 	gerador.emissor.Emitir("PARAM " + strconv.Itoa(endereco))
 }
 
