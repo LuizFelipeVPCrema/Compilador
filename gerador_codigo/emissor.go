@@ -7,9 +7,11 @@ import (
 )
 
 type Emissor struct {
-	instrucoes []string
-	arquivo    *os.File
-	caminho    string
+	instrucoes  []string
+	arquivo     *os.File
+	caminho     string
+	bufferAtivo bool
+	buffer      []string
 }
 
 func NovoEmissor(caminho string) *Emissor {
@@ -21,15 +23,50 @@ func NovoEmissor(caminho string) *Emissor {
 }
 
 func (e *Emissor) Emitir(instrucao string) {
+	if e.bufferAtivo {
+		e.buffer = append(e.buffer, instrucao)
+		return
+	}
 	e.instrucoes = append(e.instrucoes, instrucao)
 }
 
+// StartBuffer faz as próximas Emitir irem para um buffer (para reordenar expressões).
+func (e *Emissor) StartBuffer() {
+	e.bufferAtivo = true
+	e.buffer = nil
+}
+
+// GetBufferAndClear retorna o buffer e desativa o buffering.
+func (e *Emissor) GetBufferAndClear() []string {
+	e.bufferAtivo = false
+	b := e.buffer
+	e.buffer = nil
+	return b
+}
+
+// EmitBuffer emite as instruções do buffer na ordem dada (termo esquerdo após termo direito).
+func (e *Emissor) EmitBuffer(instrucoes []string) {
+	for _, s := range instrucoes {
+		e.instrucoes = append(e.instrucoes, s)
+	}
+}
+
+// RemoverUltima remove e retorna a última instrução emitida
+func (e *Emissor) RemoverUltima() string {
+	if len(e.instrucoes) == 0 {
+		return ""
+	}
+	ultima := e.instrucoes[len(e.instrucoes)-1]
+	e.instrucoes = e.instrucoes[:len(e.instrucoes)-1]
+	return ultima
+}
+
 func (e *Emissor) LinhaAtual() int {
-	return len(e.instrucoes)
+	return len(e.instrucoes) - 1
 }
 
 func (e *Emissor) ProximaLinha() int {
-	return len(e.instrucoes) + 1
+	return len(e.instrucoes)
 }
 
 func (e *Emissor) EmitirComMarcador(prefixo string) int {

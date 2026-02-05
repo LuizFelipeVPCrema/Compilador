@@ -1,8 +1,16 @@
 package gerador_codigo
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 func (gerador *Gerador) GeradorNumero(valor string) {
+	if strings.HasSuffix(valor, ".0") && len(valor) > 2 {
+		if _, err := strconv.Atoi(valor[:len(valor)-2]); err == nil {
+			valor = valor[:len(valor)-2]
+		}
+	}
 	gerador.emissor.Emitir("CRCT " + valor)
 }
 

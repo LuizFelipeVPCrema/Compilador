@@ -12,15 +12,24 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Uso: go run . <arquivo_entrada>")
+		fmt.Println("Uso: go run . <arquivo_entrada> [lexemas]")
 		fmt.Println("Exemplo: go run . descricao/correto.python.txt")
+		fmt.Println("         go run . descricao/correto.python.txt lexemas  (gera lexemas.txt)")
 		os.Exit(1)
 	}
 
 	nomeArquivo := os.Args[1]
 	arquivoSaida := "codigo.objeto.txt"
+	gerarLexemas := len(os.Args) > 2 && os.Args[2] == "lexemas"
 
 	fmt.Printf("Processando arquivo: %s\n", nomeArquivo)
+	if gerarLexemas {
+		if err := lexer.GerarTabelaLexemas(nomeArquivo); err != nil {
+			fmt.Printf("Erro ao gerar lexemas: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Lexemas salvos em lexemas.txt")
+	}
 
 	lex, err := lexer.NovoLexer(nomeArquivo)
 	if err != nil {

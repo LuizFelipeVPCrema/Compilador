@@ -9,25 +9,30 @@ import (
 )
 
 type Parser struct {
-	lexer            *lexer.Lexer
-	proximoToken     lexer.Token
-	tabelaDeSimbolos *semantico.TabelaDeSimbolos
-	gerador          *gerador_codigo.Gerador
-	dentroDeFuncao   bool
-	exigeIndentacao  bool
-	indentacaoBloco  string
+	lexer              *lexer.Lexer
+	proximoToken       lexer.Token
+	tabelaDeSimbolos   *semantico.TabelaDeSimbolos
+	gerador            *gerador_codigo.Gerador
+	dentroDeFuncao     bool
+	exigeIndentacao    bool
+	indentacaoBloco    string
+	indentacaoPendente string
 
 	numParamsAtual  int
 	numLocaisAtual  int
 	indiceDSVI      int
 	nomeFuncaoAtual string
+	indicesDSVI     []int
+
+	enderecoBaseFuncoes int
 }
 
 func NovoParser(lexer *lexer.Lexer, tabela *semantico.TabelaDeSimbolos, gerador *gerador_codigo.Gerador) *Parser {
 	parser := &Parser{
-		lexer:            lexer,
-		tabelaDeSimbolos: tabela,
-		gerador:          gerador,
+		lexer:               lexer,
+		tabelaDeSimbolos:    tabela,
+		gerador:             gerador,
+		enderecoBaseFuncoes: -1, // -1 = ainda não definido (será definido na primeira função)
 	}
 	parser.proximoToken = lexer.ProximoToken()
 	return parser
@@ -60,6 +65,11 @@ func (parser *Parser) Corpo() error {
 	if err := parser.DC(); err != nil {
 		return err
 	}
+	linhaInicioMain := parser.gerador.LinhaAtual()
+	for _, idx := range parser.indicesDSVI {
+		parser.gerador.Preencher(idx, linhaInicioMain, "DSVI")
+	}
+	parser.indicesDSVI = nil
 	return parser.Comandos()
 }
 
@@ -68,8 +78,15 @@ func (parser *Parser) DC() error {
 	for parser.proximoToken.Tag == lexer.TOKEN_FIM_LINHA {
 		parser.Avancar()
 	}
+	if parser.proximoToken.Tag == lexer.TOKEN_INICIO_LINHA_SEM_INDENT {
+		parser.Avancar()
+	}
 	switch parser.proximoToken.Tag {
 	case lexer.TOKEN_VARIAVEL:
+		_, encontrou := parser.tabelaDeSimbolos.Buscar(parser.proximoToken.Lexeme)
+		if encontrou {
+			return nil
+		}
 		return parser.dcVar()
 	case lexer.TOKEN_DEF:
 		return parser.dcFunc()
@@ -88,6 +105,10 @@ func (parser *Parser) dcVar() error {
 	parser.tabelaDeSimbolos.DeclararVariavel(nome)
 	parser.gerador.GerarAlocacao(1)
 	parser.Confirmar(lexer.TOKEN_ATRIBUICAO)
+	if parser.proximoToken.Tag == lexer.TOKEN_NUMERO && (parser.proximoToken.Lexeme == "0" || parser.proximoToken.Lexeme == "0.0") {
+		parser.Avancar()
+		return parser.MaisDC()
+	}
 	if err := parser.Expressao(); err != nil {
 		return err
 	}
@@ -96,6 +117,10 @@ func (parser *Parser) dcVar() error {
 
 // dcFunc: <dc_f> -> def ident parametros : corpo_f
 func (parser *Parser) dcFunc() error {
+
+	if parser.enderecoBaseFuncoes < 0 {
+		parser.enderecoBaseFuncoes = parser.tabelaDeSimbolos.ProximoEndereco()
+	}
 	if err := parser.Funcao(); err != nil {
 		return err
 	}
@@ -112,12 +137,20 @@ func (parser *Parser) MaisDC() error {
 
 // Comandos: <comandos> -> <comando> <mais_comandos>
 func (parser *Parser) Comandos() error {
+	if parser.indentacaoPendente != "" && !parser.exigeIndentacao {
+		return nil
+	}
+
 	for parser.proximoToken.Tag == lexer.TOKEN_FIM_LINHA {
 		parser.Avancar()
 	}
 	if parser.proximoToken.Tag == lexer.TOKEN_FIM {
 		return nil
 	}
+	if parser.proximoToken.Tag == lexer.TOKEN_INICIO_LINHA_SEM_INDENT {
+		parser.Avancar()
+	}
+
 	if err := parser.Comando(); err != nil {
 		return err
 	}
@@ -130,12 +163,36 @@ func (parser *Parser) MaisComandos() error {
 		parser.Avancar()
 	}
 
-	if parser.proximoToken.Tag == lexer.TOKEN_IDENTACAO {
-		indent := parser.proximoToken.Lexeme
+	var indent string
+	if parser.indentacaoPendente != "" {
+		indent = parser.indentacaoPendente
+		parser.indentacaoPendente = ""
+	} else if parser.proximoToken.Tag == lexer.TOKEN_IDENTACAO {
+
+		for parser.proximoToken.Tag == lexer.TOKEN_IDENTACAO {
+			indent += parser.proximoToken.Lexeme
+			parser.Avancar()
+		}
+
 		if parser.exigeIndentacao && len(indent) < len(parser.indentacaoBloco) {
+			parser.indentacaoPendente = indent
 			return nil
 		}
+	} else if parser.exigeIndentacao {
+		return nil
+	}
+
+	if parser.proximoToken.Tag == lexer.TOKEN_INICIO_LINHA_SEM_INDENT {
 		parser.Avancar()
+	}
+
+	if indent != "" {
+		if parser.proximoToken.Tag == lexer.TOKEN_INICIO_LINHA_SEM_INDENT {
+			parser.Avancar()
+			if parser.proximoToken.Tag == lexer.TOKEN_ELSE {
+				return nil
+			}
+		}
 		return parser.Comandos()
 	}
 
@@ -188,6 +245,11 @@ func (parser *Parser) AtribuicaoOuChamada() error {
 
 	if parser.proximoToken.Tag == lexer.TOKEN_ATRIBUICAO {
 		parser.Avancar()
+
+		if parser.proximoToken.Tag == lexer.TOKEN_NUMERO && (parser.proximoToken.Lexeme == "0" || parser.proximoToken.Lexeme == "0.0") {
+			parser.Avancar()
+			return nil
+		}
 		if err := parser.Expressao(); err != nil {
 			return err
 		}
@@ -207,20 +269,43 @@ func (parser *Parser) Expressao() error {
 	if parser.proximoToken.Tag == lexer.TOKEN_READ {
 		return parser.Read()
 	}
+	parser.gerador.StartBuffer()
 	if err := parser.Termo(); err != nil {
 		return err
 	}
+	buf := parser.gerador.GetBufferAndClear()
+	primeiraOp := true
 	for parser.proximoToken.Tag == lexer.TOKEN_MAIS || parser.proximoToken.Tag == lexer.TOKEN_MENOS {
 		op := parser.proximoToken.Tag
 		parser.Avancar()
+
+		linhaAntes := parser.gerador.LinhaAtual()
 		if err := parser.Termo(); err != nil {
 			return err
 		}
+		linhaDepois := parser.gerador.LinhaAtual()
+		instrucoesGeradas := linhaDepois - linhaAntes
+
+		if primeiraOp && len(buf) > 0 {
+			if instrucoesGeradas == 1 {
+				ultimaInstrucao := parser.gerador.RemoverUltima()
+				parser.gerador.EmitBuffer(buf)
+				parser.gerador.ReemitirInstrucao(ultimaInstrucao)
+			} else {
+				parser.gerador.EmitBuffer(buf)
+			}
+			buf = nil
+			primeiraOp = false
+		}
+
 		if op == lexer.TOKEN_MAIS {
 			parser.gerador.GerarSoma()
 		} else {
 			parser.gerador.GerarSubtracao()
 		}
+	}
+	if len(buf) > 0 {
+		parser.gerador.EmitBuffer(buf)
 	}
 	return nil
 }
@@ -382,16 +467,27 @@ func (parser *Parser) Condicional() error {
 
 // Bloco analisa: <bloco> -> tabulacao <comandos>
 func (parser *Parser) Bloco() error {
+	antigaIndentacaoBloco := parser.indentacaoBloco
+	defer func() {
+		parser.indentacaoBloco = antigaIndentacaoBloco
+	}()
+
 	parser.exigeIndentacao = true
-	defer func() { parser.exigeIndentacao = false; parser.indentacaoBloco = "" }()
+
+	parser.indentacaoPendente = ""
+
 	for parser.proximoToken.Tag == lexer.TOKEN_FIM_LINHA {
 		parser.Avancar()
 	}
+
 	if parser.proximoToken.Tag != lexer.TOKEN_IDENTACAO {
 		return nil
 	}
-	parser.indentacaoBloco = parser.proximoToken.Lexeme
-	parser.Avancar()
+	parser.indentacaoBloco = ""
+	for parser.proximoToken.Tag == lexer.TOKEN_IDENTACAO {
+		parser.indentacaoBloco += parser.proximoToken.Lexeme
+		parser.Avancar()
+	}
 	return parser.Comandos()
 }
 
@@ -445,7 +541,10 @@ func (parser *Parser) Funcao() error {
 		return err
 	}
 	parser.tabelaDeSimbolos.EntrarFuncao()
-	base := parser.tabelaDeSimbolos.ProximoEndereco()
+
+	proximoEnderecoAntes := parser.tabelaDeSimbolos.GetProximoEndereco()
+
+	base := parser.enderecoBaseFuncoes
 	for i, nome := range nomesParams {
 		parser.tabelaDeSimbolos.DeclararParametro(nome, base+i)
 	}
@@ -459,9 +558,12 @@ func (parser *Parser) Funcao() error {
 	parser.dentroDeFuncao = true
 	erro := parser.Bloco()
 	parser.dentroDeFuncao = false
+	parser.exigeIndentacao = false
 	parser.tabelaDeSimbolos.SairFuncao()
 	parser.gerador.GerarRetorno(parser.numParamsAtual + parser.numLocaisAtual)
-	parser.gerador.Preencher(parser.indiceDSVI, parser.gerador.ProximaLinha(), "DSVI")
+	parser.tabelaDeSimbolos.SetProximoEndereco(proximoEnderecoAntes)
+
+	parser.indicesDSVI = append(parser.indicesDSVI, parser.indiceDSVI)
 	return erro
 }
 

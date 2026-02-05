@@ -17,9 +17,11 @@ type Simbolo struct {
 }
 
 type TabelaDeSimbolos struct {
-	simbolos            map[string]Simbolo
-	proximoEndereco     int
-	adicionadosNaFuncao []string
+	simbolos             map[string]Simbolo
+	proximoEndereco      int
+	adicionadosNaFuncao  []string
+	enderecoBaseGlobal   int
+	simbolosSobrescritos map[string]Simbolo
 }
 
 func NovaTabelaDeSimbolos() *TabelaDeSimbolos {
@@ -32,13 +34,21 @@ func NovaTabelaDeSimbolos() *TabelaDeSimbolos {
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararVariavel(nome string) {
 	endereco := tabelaDeSimbolos.proximoEndereco
+	simboloAntigo, jaExistia := tabelaDeSimbolos.simbolos[nome]
+
+	if jaExistia && tabelaDeSimbolos.simbolosSobrescritos != nil &&
+		simboloAntigo.Endereco < tabelaDeSimbolos.enderecoBaseGlobal {
+		tabelaDeSimbolos.simbolosSobrescritos[nome] = simboloAntigo
+	}
+
 	tabelaDeSimbolos.simbolos[nome] = Simbolo{
 		Nome:     nome,
 		Tipo:     SIMBOLO_VARIAVEL,
 		Endereco: endereco,
 	}
 	tabelaDeSimbolos.proximoEndereco++
-	if tabelaDeSimbolos.adicionadosNaFuncao != nil {
+
+	if tabelaDeSimbolos.adicionadosNaFuncao != nil && !jaExistia {
 		tabelaDeSimbolos.adicionadosNaFuncao = append(tabelaDeSimbolos.adicionadosNaFuncao, nome)
 	}
 }
@@ -74,26 +84,51 @@ func (tabelaDeSimbolos *TabelaDeSimbolos) SetProximoEndereco(endereco int) {
 	tabelaDeSimbolos.proximoEndereco = endereco
 }
 
+func (tabelaDeSimbolos *TabelaDeSimbolos) GetProximoEndereco() int {
+	return tabelaDeSimbolos.proximoEndereco
+}
+
 func (tabelaDeSimbolos *TabelaDeSimbolos) DeclararParametro(nome string, endereco int) {
+	simboloAntigo, jaExistia := tabelaDeSimbolos.simbolos[nome]
+
+	if jaExistia && tabelaDeSimbolos.simbolosSobrescritos != nil {
+		if simboloAntigo.Endereco < tabelaDeSimbolos.enderecoBaseGlobal {
+			tabelaDeSimbolos.simbolosSobrescritos[nome] = simboloAntigo
+		}
+	}
+
 	tabelaDeSimbolos.simbolos[nome] = Simbolo{
 		Nome:     nome,
 		Tipo:     SIMBOLO_VARIAVEL,
 		Endereco: endereco,
 	}
-	if tabelaDeSimbolos.adicionadosNaFuncao != nil {
+
+	if tabelaDeSimbolos.adicionadosNaFuncao != nil && !jaExistia {
 		tabelaDeSimbolos.adicionadosNaFuncao = append(tabelaDeSimbolos.adicionadosNaFuncao, nome)
 	}
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) EntrarFuncao() {
+	tabelaDeSimbolos.enderecoBaseGlobal = tabelaDeSimbolos.proximoEndereco
 	tabelaDeSimbolos.adicionadosNaFuncao = make([]string, 0)
+	tabelaDeSimbolos.simbolosSobrescritos = make(map[string]Simbolo)
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) SairFuncao() {
 	for _, nome := range tabelaDeSimbolos.adicionadosNaFuncao {
-		delete(tabelaDeSimbolos.simbolos, nome)
+		if simbolo, ok := tabelaDeSimbolos.simbolos[nome]; ok {
+			if simbolo.Endereco >= tabelaDeSimbolos.enderecoBaseGlobal || simbolo.Endereco < 0 {
+				delete(tabelaDeSimbolos.simbolos, nome)
+			}
+		}
 	}
+
+	for nome, simboloAntigo := range tabelaDeSimbolos.simbolosSobrescritos {
+		tabelaDeSimbolos.simbolos[nome] = simboloAntigo
+	}
+
 	tabelaDeSimbolos.adicionadosNaFuncao = nil
+	tabelaDeSimbolos.simbolosSobrescritos = nil
 }
 
 func (tabelaDeSimbolos *TabelaDeSimbolos) Existe(nome string) bool {
@@ -107,6 +142,14 @@ func (tabelaDeSimbolos *TabelaDeSimbolos) ExisteNaFuncaoAtual(nome string) bool 
 			return true
 		}
 	}
+	if tabelaDeSimbolos.adicionadosNaFuncao != nil {
+		if simbolo, existe := tabelaDeSimbolos.simbolos[nome]; existe {
+			if simbolo.Endereco < 0 || simbolo.Endereco >= tabelaDeSimbolos.enderecoBaseGlobal {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 

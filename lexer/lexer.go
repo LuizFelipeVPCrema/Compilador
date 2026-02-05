@@ -6,14 +6,12 @@ import (
 	"os"
 )
 
-
 type Lexer struct {
-	reader *bufio.Reader
-	caracter rune
-	noInicioLinha bool
+	reader          *bufio.Reader
+	caracter        rune
+	noInicioLinha   bool
+	tokensPendentes []Token
 }
-
-
 
 func NovoLexer(nomeArquivo string) (*Lexer, error) {
 	file, err := os.Open(nomeArquivo)
@@ -22,7 +20,7 @@ func NovoLexer(nomeArquivo string) (*Lexer, error) {
 	}
 
 	lexer := &Lexer{
-		reader: bufio.NewReader(file),
+		reader:        bufio.NewReader(file),
 		noInicioLinha: true,
 	}
 
@@ -62,10 +60,33 @@ func (lexer *Lexer) indentificarIndentacao() Token {
 		indentacao += string(lexer.caracter)
 		lexer.lerCaracter()
 	}
-	if len(indentacao) > 0 {
-		return Token{Tag: TOKEN_IDENTACAO, Lexeme: indentacao}
+	if len(indentacao) == 0 {
+		return Token{Tag: TOKEN_ERROR, Lexeme: ""}
 	}
-	return Token{Tag: TOKEN_ERROR, Lexeme: ""}
+	niveis := 0
+	for _, r := range indentacao {
+		if r == ' ' {
+			niveis++
+		} else {
+			niveis += 2
+		}
+	}
+	niveis /= 2
+	if niveis == 0 {
+		return Token{Tag: TOKEN_ERROR, Lexeme: ""}
+	}
+	for i := 0; i < niveis-1; i++ {
+		lexer.tokensPendentes = append(lexer.tokensPendentes, Token{Tag: TOKEN_IDENTACAO, Lexeme: "  "})
+	}
+	return Token{Tag: TOKEN_IDENTACAO, Lexeme: "  "}
+}
+
+func (lexer *Lexer) identificarInicioLinhaSemIndentacao() (Token, bool) {
+	if lexer.caracter == '\n' || lexer.caracter == 0 || lexer.caracter == '\r' {
+		return Token{}, false
+	}
+	lexer.noInicioLinha = false
+	return Token{Tag: TOKEN_INICIO_LINHA_SEM_INDENT, Lexeme: ""}, true
 }
 
 func (lexer *Lexer) pularComentarios() {
@@ -77,12 +98,12 @@ func (lexer *Lexer) pularComentarios() {
 				lexer.lerCaracter()
 				lexer.lerCaracter()
 				lexer.lerCaracter()
-				
+
 				for {
 					if lexer.caracter == 0 {
-						return 
+						return
 					}
-					
+
 					if lexer.caracter == '"' {
 						caracter2, err := lexer.reader.Peek(1)
 						if err == nil && len(caracter2) > 0 && caracter2[0] == '"' {
@@ -95,7 +116,7 @@ func (lexer *Lexer) pularComentarios() {
 							}
 						}
 					}
-					
+
 					lexer.lerCaracter()
 				}
 			}
@@ -125,19 +146,17 @@ func (lexer *Lexer) identificarPalavraReservada() Token {
 	case "input":
 		return Token{Tag: TOKEN_INPUT, Lexeme: lexeme}
 	case "read":
-		return Token{Tag: TOKEN_READ, Lexeme: lexeme} 
+		return Token{Tag: TOKEN_READ, Lexeme: lexeme}
 	default:
 		return Token{Tag: TOKEN_VARIAVEL, Lexeme: lexeme}
 	}
 
 }
 
-
-
 func (lexer *Lexer) identificarOperador() Token {
 	caracterAtual := lexer.caracter
 	lexer.lerCaracter()
-	
+
 	switch caracterAtual {
 	case '+':
 		return Token{Tag: TOKEN_MAIS, Lexeme: "+"}
@@ -179,7 +198,7 @@ func (lexer *Lexer) identificarOperador() Token {
 func (lexer *Lexer) indentificarDelimitadores() Token {
 	caracterAtual := lexer.caracter
 	lexer.lerCaracter()
-	
+
 	switch caracterAtual {
 	case '(':
 		return Token{Tag: TOKEN_ABRE_PARENTESES, Lexeme: "("}
@@ -192,41 +211,49 @@ func (lexer *Lexer) indentificarDelimitadores() Token {
 	}
 }
 
-
 func (lexer *Lexer) ProximoToken() Token {
+	if len(lexer.tokensPendentes) > 0 {
+		t := lexer.tokensPendentes[0]
+		lexer.tokensPendentes = lexer.tokensPendentes[1:]
+		return t
+	}
 	for {
 		if lexer.noInicioLinha {
 			lexer.pularComentarios()
 			if lexer.caracter == ' ' || lexer.caracter == '\t' {
 				tokenIndentacao := lexer.indentificarIndentacao()
 				if tokenIndentacao.Tag != TOKEN_ERROR {
+					lexer.noInicioLinha = false
 					lexer.pularComentarios()
 					return tokenIndentacao
 				}
 			}
 			lexer.pularComentarios()
+			if token, ok := lexer.identificarInicioLinhaSemIndentacao(); ok {
+				return token
+			}
 			lexer.noInicioLinha = false
 		}
 
 		lexer.pularEspacos()
 		lexer.pularComentarios()
 		lexer.pularEspacos()
-		
+
 		if lexer.caracter == 0 {
 			return Token{Tag: TOKEN_FIM, Lexeme: "PARA"}
 		}
-		
+
 		if lexer.caracter == '\n' {
 			lexer.lerCaracter()
 			lexer.noInicioLinha = true
 			return Token{Tag: TOKEN_FIM_LINHA, Lexeme: "\n"}
 		}
-		
+
 		if lexer.caracter == '\r' {
 			lexer.lerCaracter()
 			continue
 		}
-		
+
 		if ehLetra(lexer.caracter) {
 			return lexer.identificarPalavraReservada()
 		}
@@ -240,7 +267,7 @@ func (lexer *Lexer) ProximoToken() Token {
 			return lexer.identificarOperador()
 		case ',':
 			lexer.lerCaracter()
-			return Token{Tag: TOKEN_VIRGULA, Lexeme: ","} 
+			return Token{Tag: TOKEN_VIRGULA, Lexeme: ","}
 		case '(', ')', ':':
 			return lexer.indentificarDelimitadores()
 		case '"':
@@ -283,7 +310,11 @@ func GerarTabelaLexemas(nomeArquivo string) error {
 	defer arquivo.Close()
 
 	for _, token := range tokens {
-		arquivo.WriteString(fmt.Sprintf("<%s, \"%s\">\n", token.Tag.String(), token.Lexeme))
+		lexemeExibir := token.Lexeme
+		if token.Tag == TOKEN_FIM_LINHA {
+			lexemeExibir = "\\n"
+		}
+		arquivo.WriteString(fmt.Sprintf("<%s, \"%s\">\n", token.Tag.String(), lexemeExibir))
 	}
 
 	return nil
