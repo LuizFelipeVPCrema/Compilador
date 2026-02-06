@@ -33,7 +33,7 @@ func (gerador *Gerador) GerarIf(
 	return nil
 }
 
-// GerarWhile gera código para while: [início], condição, DSVF (fim), bloco, DSVI (início).
+// GerarWhile: [início], condição, DSVF (fim), bloco, DSVI (início).
 func (gerador *Gerador) GerarWhile(
 	gerarCondicao func() error,
 	bloco func() error,

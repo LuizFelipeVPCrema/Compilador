@@ -28,6 +28,3 @@ Gera **codigo.objeto.txt** na raiz.
 
 1. **Executador (máquina virtual)**  
    Nenhum módulo lê o codigo.objeto.txt e executa as instruções. Falta: ler o arquivo, interpretar cada instrução, manter memória e pilha, executar até PARA.
-
-2. **Conferência com o gabarito**  
-   O codigo.objeto.txt gerado pode ainda divergir em detalhes do `descricao/codigo.objeto.txt`; vale comparar e ajustar se necessário (por exemplo formato de números ou ordem de instruções em casos de borda).
